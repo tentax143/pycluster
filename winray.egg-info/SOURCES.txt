@@ -1,0 +1,8 @@
+README.md
+setup.py
+winray.egg-info/PKG-INFO
+winray.egg-info/SOURCES.txt
+winray.egg-info/dependency_links.txt
+winray.egg-info/entry_points.txt
+winray.egg-info/requires.txt
+winray.egg-info/top_level.txt
