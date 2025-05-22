@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>WinRay Cluster Dashboard</title>
   <style>
+    /* Basic styling similar to your current style + dropdown tweaks */
     body {
       font-family: 'Segoe UI', sans-serif;
       background: #0f172a;
@@ -11,14 +12,27 @@
       margin: 0;
       padding: 20px;
     }
+    nav {
+      background: #1e293b;
+      padding: 10px 20px;
+      display: flex;
+      gap: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+    nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    nav a:hover {
+      color: #60a5fa;
+    }
     h1, h2 {
       text-align: center;
       color: #94a3b8;
-    }
-    h1 {
-      margin-bottom: 30px;
-      font-size: 2.5rem;
-      letter-spacing: 1px;
+      margin: 10px 0 20px;
     }
     .section {
       background: #1e293b;
@@ -27,10 +41,6 @@
       border-radius: 16px;
       max-width: 1000px;
       box-shadow: 0 10px 15px rgba(0,0,0,0.3);
-      transition: transform 0.3s ease;
-    }
-    .section:hover {
-      transform: translateY(-2px);
     }
     table {
       width: 100%;
@@ -67,25 +77,54 @@
       border-radius: 20px;
       display: inline-block;
     }
-    canvas {
-      margin-top: 25px;
-      width: 100% !important;
-      height: 350px !important;
+    /* Dropdown styles */
+    .worker-row {
+      cursor: pointer;
+      user-select: none;
+    }
+    .dropdown-content {
+      display: none;
+      background: #334155;
+      color: #cbd5e1;
+    }
+    .dropdown-content td {
+      text-align: left;
+      padding: 10px 20px;
+      border-bottom: none;
+      font-size: 0.9rem;
+    }
+    .dropdown-content tr:hover {
+      background: none;
     }
   </style>
 </head>
 <body>
+
+  <nav>
+    <a href="/dashboard">Home</a>
+    <a href="/metrics_page">Metrics Page</a>
+  </nav>
+
   <h1>WinRay Cluster Dashboard</h1>
 
   <div class="section">
     <h2>Head Node Info</h2>
     <table>
       <thead>
-        <tr><th>Name</th><th>IP</th><th>CPU Usage</th><th>RAM Usage</th></tr>
+        <tr>
+          <th>Name</th><th>IP</th><th>CPU Usage</th><th>RAM Usage</th><th>GPU Usage</th><th>Disk Usage</th>
+        </tr>
       </thead>
       <tbody id="head-info-body"></tbody>
     </table>
-    <canvas id="headChart"></canvas>
+
+    <h3>Top 5 Processes (by CPU%)</h3>
+    <table>
+      <thead>
+        <tr><th>PID</th><th>Name</th><th>CPU %</th><th>Memory %</th></tr>
+      </thead>
+      <tbody id="head-processes-body"></tbody>
+    </table>
   </div>
 
   <div class="section">
@@ -96,157 +135,108 @@
       </thead>
       <tbody id="worker-table-body"></tbody>
     </table>
-    <canvas id="workerChart"></canvas>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    Chart.defaults.color = '#94a3b8';
-    Chart.defaults.borderColor = '#334155';
+<script>
+  async function fetchData() {
+    try {
+      const res = await fetch('/metrics');
+      return await res.json();
+    } catch (e) {
+      console.error("Failed fetching metrics:", e);
+      return null;
+    }
+  }
 
-    const headChart = new Chart(document.getElementById('headChart'), {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          { 
-            label: 'CPU Usage (%)',
-            borderColor: '#60a5fa',
-            backgroundColor: 'rgba(96, 165, 250, 0.1)',
-            data: [],
-            borderWidth: 2,
-            pointRadius: 3,
-            tension: 0.3
-          },
-          { 
-            label: 'RAM Usage (%)',
-            borderColor: '#c084fc',
-            backgroundColor: 'rgba(192, 132, 252, 0.1)',
-            data: [],
-            borderWidth: 2,
-            pointRadius: 3,
-            tension: 0.3
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        animation: {
-          duration: 300,
-          easing: 'easeOutQuart'
-        },
-        scales: { 
-          y: { 
-            beginAtZero: true,
-            max: 100,
-            grid: { color: '#334155' }
-          },
-          x: { grid: { display: false } }
-        },
-        plugins: {
-          legend: { labels: { font: { size: 14 } } }
-        }
+  function createWorkerDropdown(id, details) {
+    const container = document.createElement('tbody');
+
+    // Main row clickable
+    const mainRow = document.createElement('tr');
+    mainRow.classList.add('worker-row');
+    mainRow.innerHTML = `
+      <td>${id}</td>
+      <td>${details.ip}</td>
+      <td>${details.port}</td>
+      <td>${details.cpu}%</td>
+      <td>${details.ram}%</td>
+      <td><span class="status-${details.status.toLowerCase()}">${details.status}</span></td>
+    `;
+
+    // Dropdown detail row (hidden by default)
+    const dropdownRow = document.createElement('tr');
+    dropdownRow.classList.add('dropdown-content');
+    dropdownRow.innerHTML = `
+      <td colspan="6">
+        <strong>Details:</strong><br>
+        Status: ${details.status}<br>
+        IP: ${details.ip}<br>
+        Port: ${details.port}<br>
+        CPU: ${details.cpu}%<br>
+        RAM: ${details.ram}%<br>
+        GPU: ${details.gpu ?? 'N/A'}%<br>
+        Disk: ${details.disk ?? 'N/A'}%<br>
+        Last heartbeat: ${details.last_heartbeat ?? 'N/A'}
+      </td>
+    `;
+
+    mainRow.addEventListener('click', () => {
+      if (dropdownRow.style.display === 'table-row') {
+        dropdownRow.style.display = 'none';
+      } else {
+        dropdownRow.style.display = 'table-row';
       }
     });
 
-    const workerChart = new Chart(document.getElementById('workerChart'), {
-      type: 'bar',
-      data: {
-        labels: [],
-        datasets: [
-          { 
-            label: 'CPU (%)',
-            data: [],
-            backgroundColor: 'rgba(96, 165, 250, 0.8)',
-            borderRadius: 4,
-            borderWidth: 0
-          },
-          { 
-            label: 'RAM (%)',
-            data: [],
-            backgroundColor: 'rgba(192, 132, 252, 0.8)',
-            borderRadius: 4,
-            borderWidth: 0
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        animation: {
-          duration: 300,
-          easing: 'easeOutQuart'
-        },
-        scales: { 
-          y: { 
-            beginAtZero: true,
-            max: 100,
-            grid: { color: '#334155' }
-          },
-          x: { grid: { display: false } }
-        },
-        plugins: {
-          legend: { labels: { font: { size: 14 } } }
-        }
-      }
-    });
+    container.appendChild(mainRow);
+    container.appendChild(dropdownRow);
 
-    function updateCharts(data) {
-      const head = data.head_info;
-      const workers = data.workers;
-      const now = new Date().toLocaleTimeString();
+    return container;
+  }
 
-      // Update Head Node Table
-      const headHtml = `<tr><td>${head.name}</td><td>${head.ip}</td><td>${head.cpu}%</td><td>${head.ram}%</td></tr>`;
-      document.getElementById('head-info-body').innerHTML = headHtml;
+  async function updateDashboard() {
+    const data = await fetchData();
+    if (!data) return;
 
-      // Update Head Chart
-      if (headChart.data.labels.length > 20) {
-        headChart.data.labels.shift();
-        headChart.data.datasets[0].data.shift();
-        headChart.data.datasets[1].data.shift();
-      }
-      headChart.data.labels.push(now);
-      headChart.data.datasets[0].data.push(head.cpu);
-      headChart.data.datasets[1].data.push(head.ram);
-      headChart.update();
+    // Update head info table
+    const head = data.head_info;
+    const headRowHtml = `<tr>
+      <td>${head.name}</td>
+      <td>${head.ip}</td>
+      <td>${head.cpu}%</td>
+      <td>${head.ram}%</td>
+      <td>${head.gpu ?? 'N/A'}%</td>
+      <td>${head.disk ?? 'N/A'}%</td>
+    </tr>`;
+    document.getElementById('head-info-body').innerHTML = headRowHtml;
 
-      // Update Worker Table
-      const workerBody = document.getElementById('worker-table-body');
-      workerBody.innerHTML = '';
-      const ids = [];
-      const cpuData = [];
-      const ramData = [];
-
-      for (const [id, w] of Object.entries(workers)) {
-        ids.push(id);
-        cpuData.push(w.cpu);
-        ramData.push(w.ram);
-        workerBody.innerHTML += `
-          <tr>
-            <td>${id}</td><td>${w.ip}</td><td>${w.port}</td>
-            <td>${w.cpu}%</td><td>${w.ram}%</td>
-            <td><span class="status-${w.status.toLowerCase()}">${w.status}</span></td>
-          </tr>`;
-      }
-
-      workerChart.data.labels = ids;
-      workerChart.data.datasets[0].data = cpuData;
-      workerChart.data.datasets[1].data = ramData;
-      workerChart.update();
+    // Update top 5 processes table
+    let procHtml = '';
+    if (head.processes && head.processes.length > 0) {
+      head.processes.forEach(proc => {
+        procHtml += `<tr>
+          <td>${proc.pid}</td>
+          <td>${proc.name}</td>
+          <td>${proc.cpu.toFixed(1)}</td>
+          <td>${proc.memory.toFixed(1)}</td>
+        </tr>`;
+      });
+    } else {
+      procHtml = '<tr><td colspan="4">No process data</td></tr>';
     }
+    document.getElementById('head-processes-body').innerHTML = procHtml;
 
-    async function fetchMetrics() {
-      try {
-        const res = await fetch('/metrics');
-        const data = await res.json();
-        updateCharts(data);
-      } catch (err) {
-        console.error("Failed to fetch metrics:", err);
-      }
+    // Update worker table with dropdowns
+    const workerBody = document.getElementById('worker-table-body');
+    workerBody.innerHTML = '';
+    for (const [id, w] of Object.entries(data.workers)) {
+      const workerSection = createWorkerDropdown(id, w);
+      workerBody.appendChild(workerSection);
     }
+  }
 
-    setInterval(fetchMetrics, 2000);
-    fetchMetrics();
-  </script>
+  setInterval(updateDashboard, 3000);
+  updateDashboard();
+</script>
 </body>
 </html>

@@ -2,18 +2,34 @@ import requests
 import time
 import uuid
 import psutil
+import GPUtil
 
 WORKER_PORT = 9000  # Reserved for future use
 
+def get_gpu_usage():
+    gpus = GPUtil.getGPUs()
+    if gpus:
+        # Average GPU load across GPUs (0-100)
+        return round(sum(gpu.load for gpu in gpus) / len(gpus) * 100, 2)
+    return 0.0
+
+def get_disk_usage():
+    disk = psutil.disk_usage('/')
+    return round(disk.percent, 2)
+
 def get_metrics():
-    return psutil.cpu_percent(interval=1), psutil.virtual_memory().percent
+    cpu = psutil.cpu_percent(interval=1)
+    ram = psutil.virtual_memory().percent
+    gpu = get_gpu_usage()
+    disk = get_disk_usage()
+    return cpu, ram, gpu, disk
 
 def register_worker(head_url, worker_id):
-    cpu, ram = get_metrics()
+    cpu, ram, gpu, disk = get_metrics()
     try:
         res = requests.post(
             f"{head_url}/register",
-            json={"id": worker_id, "port": WORKER_PORT, "cpu": cpu, "ram": ram},
+            json={"id": worker_id, "port": WORKER_PORT, "cpu": cpu, "ram": ram, "gpu": gpu, "disk": disk},
             timeout=5
         )
         if res.status_code == 200:
@@ -26,15 +42,15 @@ def register_worker(head_url, worker_id):
     return False
 
 def send_heartbeat(head_url, worker_id):
-    cpu, ram = get_metrics()  # 🟢 Get live usage every heartbeat
+    cpu, ram, gpu, disk = get_metrics()  # 🟢 Get live usage every heartbeat
     try:
         res = requests.post(
             f"{head_url}/heartbeat",
-            json={"id": worker_id, "cpu": cpu, "ram": ram},  # 🟢 Send updated metrics
+            json={"id": worker_id, "cpu": cpu, "ram": ram, "gpu": gpu, "disk": disk},  # 🟢 Send updated metrics
             timeout=5
         )
         if res.status_code == 200:
-            print(f"[HEARTBEAT] ✅ CPU: {cpu}% | RAM: {ram}%")
+            print(f"[HEARTBEAT] ✅ CPU: {cpu}% | RAM: {ram}% | GPU: {gpu}% | Disk: {disk}%")
         else:
             print("[HEARTBEAT] ❌ Worker not found")
     except Exception as e:
@@ -51,3 +67,8 @@ def run_worker(head_ip):
     while True:
         send_heartbeat(head_url, worker_id)
         time.sleep(10)  # You can reduce this to 5 or even 2 seconds for faster updates
+
+
+if __name__ == "__main__":
+    # Example: run_worker("192.168.1.100")
+    pass
