@@ -4,8 +4,12 @@ import psutil
 import GPUtil
 from flask import Flask, request, jsonify, render_template, redirect
 
+from winray.task_splitter import TaskSplitter  # Import TaskSplitter
+
 app = Flask(__name__, template_folder='templates')
 workers = {}
+
+task_splitter = TaskSplitter()  # Initialize TaskSplitter
 
 def get_gpu_usage():
     gpus = GPUtil.getGPUs()
@@ -22,6 +26,7 @@ def register_worker():
     data = request.get_json()
     ip = request.remote_addr
     worker_id = data.get("id")
+    capacity = data.get("capacity", 1)
     workers[worker_id] = {
         "ip": ip,
         "port": data.get("port"),
@@ -29,8 +34,11 @@ def register_worker():
         "ram": data.get("ram"),
         "gpu": data.get("gpu", 0),
         "disk": data.get("disk", 0),
+        "capacity": capacity,
         "last_heartbeat": time.time()
     }
+    task_splitter.update_worker_capacity(worker_id, capacity)  # Update TaskSplitter on registration
+    print(f"[HEAD] Registered worker {worker_id} with capacity {capacity}")
     return jsonify({"status": "registered", "worker_id": worker_id})
 
 @app.route("/heartbeat", methods=["POST"])
@@ -42,9 +50,43 @@ def heartbeat():
         workers[worker_id]["ram"] = data.get("ram")
         workers[worker_id]["gpu"] = data.get("gpu", 0)
         workers[worker_id]["disk"] = data.get("disk", 0)
+        workers[worker_id]["capacity"] = data.get("capacity", workers[worker_id].get("capacity", 1))
         workers[worker_id]["last_heartbeat"] = time.time()
+
+        # Update TaskSplitter capacity based on reported capacity
+        capacity = workers[worker_id]["capacity"]
+        task_splitter.update_worker_capacity(worker_id, capacity)
+
+        print(f"[HEAD] Heartbeat received from {worker_id}, capacity {capacity}")
         return jsonify({"status": "heartbeat received"})
     return jsonify({"status": "worker not found"}), 404
+
+@app.route("/add_tasks", methods=["POST"])
+def add_tasks():
+    tasks = request.get_json().get("tasks", [])
+    if not isinstance(tasks, list):
+        return jsonify({"error": "Tasks must be a list"}), 400
+
+    task_splitter.add_tasks(tasks)
+    print(f"[HEAD] Added {len(tasks)} tasks.")
+    return jsonify({"status": "tasks added", "total_tasks": len(tasks)})
+
+@app.route("/tasks/<worker_id>")
+def get_tasks_for_worker(worker_id):
+    tasks = task_splitter.get_tasks_for_worker(worker_id)
+    return jsonify({"worker_id": worker_id, "tasks": tasks})
+
+@app.route("/task_done", methods=["POST"])
+def mark_task_done():
+    data = request.get_json()
+    worker_id = data.get("worker_id")
+    task = data.get("task")
+    if not worker_id or task is None:
+        return jsonify({"error": "worker_id and task required"}), 400
+
+    task_splitter.mark_task_done(worker_id, task)
+    print(f"[HEAD] Task '{task}' marked done by {worker_id}")
+    return jsonify({"status": f"task {task} marked done by {worker_id}"})
 
 @app.route("/metrics")
 def metrics():
@@ -67,13 +109,26 @@ def metrics():
         "workers": workers
     })
 
+@app.route("/workers")
+def get_workers():
+    # Return all workers with capacity and status for task splitter
+    now = time.time()
+    output = {}
+    for wid, w in workers.items():
+        status = "Online" if now - w["last_heartbeat"] < 15 else "Offline"
+        output[wid] = {
+            "ip": w["ip"],
+            "capacity": w.get("capacity", 1),
+            "status": status
+        }
+    return jsonify(output)
+
 @app.route("/dashboard")
 def dashboard():
     return render_template("dashboard.html")
 
 @app.route("/metrics_page")
 def metrics_page():
-    # This will serve your metrics.html file from the templates folder
     return render_template("metrics.html")
 
 @app.route("/")

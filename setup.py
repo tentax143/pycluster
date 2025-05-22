@@ -1,21 +1,22 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="winray",
-    version="0.1",
+    name='winray',
+    version='0.1.0',
     packages=find_packages(),
     install_requires=[
-        "flask",
-        "requests",
-        "typer[all]",
-        "rich"
+        'flask',
+        'psutil',
+        'gputil',
+        # add other deps here
     ],
     entry_points={
-        "console_scripts": [
-            "winray=winray.cli:app"
-        ]
+        'console_scripts': [
+            'winray-head=winray.head:main',
+            'winray-worker=winray.worker:main',
+        ],
     },
-    author="godofconquest",
-    description="Lightweight Ray-like distributed task scheduler for Windows clusters",
-    python_requires='>=3.8',
+    author='Your Name',
+    description='WinRay distributed task scheduling package',
+    python_requires='>=3.7',
 )
