@@ -1,32 +1,252 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>WinRay Dashboard</title>
-    <style>
-        body { font-family: sans-serif; background: #f9f9f9; padding: 2em; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
-        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
-        th { background-color: #333; color: white; }
-        .online { color: green; font-weight: bold; }
-        .offline { color: red; font-weight: bold; }
-    </style>
+  <meta charset="UTF-8">
+  <title>WinRay Cluster Dashboard</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 20px;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #94a3b8;
+    }
+    h1 {
+      margin-bottom: 30px;
+      font-size: 2.5rem;
+      letter-spacing: 1px;
+    }
+    .section {
+      background: #1e293b;
+      padding: 25px;
+      margin: 25px auto;
+      border-radius: 16px;
+      max-width: 1000px;
+      box-shadow: 0 10px 15px rgba(0,0,0,0.3);
+      transition: transform 0.3s ease;
+    }
+    .section:hover {
+      transform: translateY(-2px);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      background: #1e293b;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 14px;
+      text-align: center;
+      border-bottom: 1px solid #334155;
+    }
+    th {
+      background: #334155;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    tr:hover {
+      background: #2d3748;
+    }
+    .status-online {
+      color: #4ade80;
+      background: #14532d;
+      padding: 6px 12px;
+      border-radius: 20px;
+      display: inline-block;
+    }
+    .status-offline {
+      color: #f87171;
+      background: #7f1d1d;
+      padding: 6px 12px;
+      border-radius: 20px;
+      display: inline-block;
+    }
+    canvas {
+      margin-top: 25px;
+      width: 100% !important;
+      height: 350px !important;
+    }
+  </style>
 </head>
 <body>
-    <h1>WinRay Worker Dashboard</h1>
+  <h1>WinRay Cluster Dashboard</h1>
+
+  <div class="section">
+    <h2>Head Node Info</h2>
     <table>
-        <tr>
-            <th>ID</th><th>IP</th><th>Port</th><th>CPU</th><th>RAM</th><th>Status</th>
-        </tr>
-        {% for id, w in workers.items() %}
-        <tr>
-            <td>{{ id }}</td>
-            <td>{{ w.ip }}</td>
-            <td>{{ w.port }}</td>
-            <td>{{ w.cpu }}%</td>
-            <td>{{ w.ram }}%</td>
-            <td class="{{ 'online' if w.status == 'Online' else 'offline' }}">{{ w.status }}</td>
-        </tr>
-        {% endfor %}
+      <thead>
+        <tr><th>Name</th><th>IP</th><th>CPU Usage</th><th>RAM Usage</th></tr>
+      </thead>
+      <tbody id="head-info-body"></tbody>
     </table>
+    <canvas id="headChart"></canvas>
+  </div>
+
+  <div class="section">
+    <h2>Worker Nodes</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>IP</th><th>Port</th><th>CPU Usage</th><th>RAM Usage</th><th>Status</th></tr>
+      </thead>
+      <tbody id="worker-table-body"></tbody>
+    </table>
+    <canvas id="workerChart"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.borderColor = '#334155';
+
+    const headChart = new Chart(document.getElementById('headChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { 
+            label: 'CPU Usage (%)',
+            borderColor: '#60a5fa',
+            backgroundColor: 'rgba(96, 165, 250, 0.1)',
+            data: [],
+            borderWidth: 2,
+            pointRadius: 3,
+            tension: 0.3
+          },
+          { 
+            label: 'RAM Usage (%)',
+            borderColor: '#c084fc',
+            backgroundColor: 'rgba(192, 132, 252, 0.1)',
+            data: [],
+            borderWidth: 2,
+            pointRadius: 3,
+            tension: 0.3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: {
+          duration: 300,
+          easing: 'easeOutQuart'
+        },
+        scales: { 
+          y: { 
+            beginAtZero: true,
+            max: 100,
+            grid: { color: '#334155' }
+          },
+          x: { grid: { display: false } }
+        },
+        plugins: {
+          legend: { labels: { font: { size: 14 } } }
+        }
+      }
+    });
+
+    const workerChart = new Chart(document.getElementById('workerChart'), {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [
+          { 
+            label: 'CPU (%)',
+            data: [],
+            backgroundColor: 'rgba(96, 165, 250, 0.8)',
+            borderRadius: 4,
+            borderWidth: 0
+          },
+          { 
+            label: 'RAM (%)',
+            data: [],
+            backgroundColor: 'rgba(192, 132, 252, 0.8)',
+            borderRadius: 4,
+            borderWidth: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: {
+          duration: 300,
+          easing: 'easeOutQuart'
+        },
+        scales: { 
+          y: { 
+            beginAtZero: true,
+            max: 100,
+            grid: { color: '#334155' }
+          },
+          x: { grid: { display: false } }
+        },
+        plugins: {
+          legend: { labels: { font: { size: 14 } } }
+        }
+      }
+    });
+
+    function updateCharts(data) {
+      const head = data.head_info;
+      const workers = data.workers;
+      const now = new Date().toLocaleTimeString();
+
+      // Update Head Node Table
+      const headHtml = `<tr><td>${head.name}</td><td>${head.ip}</td><td>${head.cpu}%</td><td>${head.ram}%</td></tr>`;
+      document.getElementById('head-info-body').innerHTML = headHtml;
+
+      // Update Head Chart
+      if (headChart.data.labels.length > 20) {
+        headChart.data.labels.shift();
+        headChart.data.datasets[0].data.shift();
+        headChart.data.datasets[1].data.shift();
+      }
+      headChart.data.labels.push(now);
+      headChart.data.datasets[0].data.push(head.cpu);
+      headChart.data.datasets[1].data.push(head.ram);
+      headChart.update();
+
+      // Update Worker Table
+      const workerBody = document.getElementById('worker-table-body');
+      workerBody.innerHTML = '';
+      const ids = [];
+      const cpuData = [];
+      const ramData = [];
+
+      for (const [id, w] of Object.entries(workers)) {
+        ids.push(id);
+        cpuData.push(w.cpu);
+        ramData.push(w.ram);
+        workerBody.innerHTML += `
+          <tr>
+            <td>${id}</td><td>${w.ip}</td><td>${w.port}</td>
+            <td>${w.cpu}%</td><td>${w.ram}%</td>
+            <td><span class="status-${w.status.toLowerCase()}">${w.status}</span></td>
+          </tr>`;
+      }
+
+      workerChart.data.labels = ids;
+      workerChart.data.datasets[0].data = cpuData;
+      workerChart.data.datasets[1].data = ramData;
+      workerChart.update();
+    }
+
+    async function fetchMetrics() {
+      try {
+        const res = await fetch('/metrics');
+        const data = await res.json();
+        updateCharts(data);
+      } catch (err) {
+        console.error("Failed to fetch metrics:", err);
+      }
+    }
+
+    setInterval(fetchMetrics, 2000);
+    fetchMetrics();
+  </script>
 </body>
 </html>

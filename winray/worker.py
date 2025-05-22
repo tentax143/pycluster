@@ -26,10 +26,15 @@ def register_worker(head_url, worker_id):
     return False
 
 def send_heartbeat(head_url, worker_id):
+    cpu, ram = get_metrics()  # 🟢 Get live usage every heartbeat
     try:
-        res = requests.post(f"{head_url}/heartbeat", json={"id": worker_id}, timeout=5)
+        res = requests.post(
+            f"{head_url}/heartbeat",
+            json={"id": worker_id, "cpu": cpu, "ram": ram},  # 🟢 Send updated metrics
+            timeout=5
+        )
         if res.status_code == 200:
-            print("[HEARTBEAT] ✅")
+            print(f"[HEARTBEAT] ✅ CPU: {cpu}% | RAM: {ram}%")
         else:
             print("[HEARTBEAT] ❌ Worker not found")
     except Exception as e:
@@ -45,4 +50,4 @@ def run_worker(head_ip):
 
     while True:
         send_heartbeat(head_url, worker_id)
-        time.sleep(10)
+        time.sleep(10)  # You can reduce this to 5 or even 2 seconds for faster updates
