@@ -1,37 +1,47 @@
-from flask import Flask, jsonify, request, render_template
-from datetime import datetime, timedelta
-import threading
+from flask import Flask, request, jsonify, render_template, redirect
+import time
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 
-connected_workers = {}
+# In-memory worker registry
+workers = {}
 
+@app.route("/register", methods=["POST"])
+def register_worker():
+    data = request.get_json()
+    ip = request.remote_addr
+    worker_id = data.get("id")
+    workers[worker_id] = {
+        "ip": ip,
+        "port": data.get("port"),
+        "cpu": data.get("cpu"),
+        "ram": data.get("ram"),
+        "last_heartbeat": time.time()
+    }
+    return jsonify({"status": "registered", "worker_id": worker_id})
+
+
+@app.route("/heartbeat", methods=["POST"])
+def heartbeat():
+    data = request.get_json()
+    worker_id = data.get("id")
+    if worker_id in workers:
+        workers[worker_id]["last_heartbeat"] = time.time()
+        return jsonify({"status": "heartbeat received"})
+    return jsonify({"status": "worker not found"}), 404
+
+
+@app.route("/dashboard")
+def dashboard():
+    now = time.time()
+    for w in workers.values():
+        w["status"] = "Online" if now - w["last_heartbeat"] < 15 else "Offline"
+    return render_template("dashboard.html", workers=workers)
 @app.route("/")
 def home():
-    return render_template("dashboard.html")
+    return redirect("/dashboard")
 
-@app.route("/register_worker", methods=["POST"])
-def register_worker():
-    data = request.json
-    worker_id = data.get("worker_id")
-    if not worker_id:
-        return jsonify({"status": "error", "message": "worker_id required"}), 400
+def run_head(host="0.0.0.0", port=5000):
+    print(f"[HEAD] Running dashboard on http://{host}:{port}")
+    app.run(host=host, port=port)
 
-    connected_workers[worker_id] = datetime.utcnow()
-    return jsonify({"status": "registered"})
-
-@app.route("/dashboard_data")
-def dashboard_data():
-    threshold = datetime.utcnow() - timedelta(seconds=30)
-    # Remove workers not seen in last 30 seconds
-    for worker_id, last_seen in list(connected_workers.items()):
-        if last_seen < threshold:
-            connected_workers.pop(worker_id)
-
-    return jsonify({"connected_workers": len(connected_workers)})
-
-def start_server_thread():
-    app.run(host="0.0.0.0", port=5000, threaded=True)
-
-if __name__ == "__main__":
-    start_server_thread()

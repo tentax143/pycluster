@@ -1,34 +1,24 @@
-import threading
-import time
-import typer
-from winray.head import start_server_thread
-from winray.worker import start_worker
+import argparse
+from winray.head import run_head
+from winray.worker import run_worker
 
-app = typer.Typer()
+def main():
+    parser = argparse.ArgumentParser(description="WinRay Distributed Task CLI")
+    subparsers = parser.add_subparsers(dest="command")
 
-server_thread = None
+    head_parser = subparsers.add_parser("head", help="Run the head node server")
 
-@app.command()
-def head():
-    global server_thread
-    if server_thread and server_thread.is_alive():
-        typer.echo("Server already running.")
-        return
-    server_thread = threading.Thread(target=start_server_thread, daemon=True)
-    server_thread.start()
-    typer.echo("✅ WinRay Head Node started on http://localhost:5000")
-    typer.echo("You can now submit tasks or start workers.")
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        typer.echo("\nStopping WinRay Head Node...")
-        typer.echo("Stopped.")
+    worker_parser = subparsers.add_parser("worker", help="Join as a worker node")
+    worker_parser.add_argument("--head-ip", "-H", required=True, help="IP address of the head node")
 
-@app.command()
-def worker():
-    typer.echo("Starting worker...")
-    start_worker()
+    args = parser.parse_args()
+
+    if args.command == "head":
+        run_head()
+    elif args.command == "worker":
+        run_worker(args.head_ip)
+    else:
+        parser.print_help()
 
 if __name__ == "__main__":
-    app()
+    main()

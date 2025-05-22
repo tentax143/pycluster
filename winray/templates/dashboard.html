@@ -1,171 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WinRay Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            padding: 20px;
-            background: #f8f9fa;
-        }
-        .card {
-            margin-bottom: 20px;
-        }
+        body { font-family: sans-serif; background: #f9f9f9; padding: 2em; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        th { background-color: #333; color: white; }
+        .online { color: green; font-weight: bold; }
+        .offline { color: red; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1 class="mb-4">WinRay Head Node Dashboard</h1>
-
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-bg-primary">
-                <div class="card-body">
-                    <h5 class="card-title">Total Tasks Submitted</h5>
-                    <h2 id="totalTasks">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-bg-warning">
-                <div class="card-body">
-                    <h5 class="card-title">Pending Tasks</h5>
-                    <h2 id="pendingTasks">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-bg-success">
-                <div class="card-body">
-                    <h5 class="card-title">Completed Tasks</h5>
-                    <h2 id="completedTasks">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-bg-info">
-                <div class="card-body">
-                    <h5 class="card-title">Connected Workers</h5>
-                    <h3>Connected Workers: <span id="worker-count">0</span></h3>
-                    <script>
-                        async function updateWorkerCount() {
-                            try {
-                                const response = await fetch("/dashboard_data");
-                                const data = await response.json();
-                                document.getElementById("worker-count").textContent = data.connected_workers;
-                            } catch (err) {
-                                console.error("Failed to fetch worker count", err);
-                            }
-                        }
-                        
-                        // Update every 5 seconds
-                        setInterval(updateWorkerCount, 5000);
-                        updateWorkerCount();
-                        </script>
-                </div>
-            </div>
-        </div>
-    </div>
-
-
-    <div class="card mb-4">
-        <div class="card-header">
-            Tasks Submitted Over Time
-        </div>
-        <div class="card-body">
-            <canvas id="tasksChart" height="100"></canvas>
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header">
-            Results Distribution
-        </div>
-        <div class="card-body">
-            <canvas id="resultsChart" height="100"></canvas>
-        </div>
-    </div>
-
-    <script>
-        const ctxTasks = document.getElementById('tasksChart').getContext('2d');
-        const ctxResults = document.getElementById('resultsChart').getContext('2d');
-
-        let tasksChart = new Chart(ctxTasks, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Tasks Submitted',
-                    data: [],
-                    borderColor: 'rgb(54, 162, 235)',
-                    fill: false,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                animation: false,
-                scales: {
-                    x: { title: { display: true, text: 'Time (seconds)' } },
-                    y: { beginAtZero: true, title: { display: true, text: 'Number of Tasks' } }
-                }
-            }
-        });
-
-        let resultsChart = new Chart(ctxResults, {
-            type: 'doughnut',
-            data: {
-                labels: ['Results'],
-                datasets: [{
-                    label: 'Results Distribution',
-                    data: [],
-                    backgroundColor: ['#198754', '#dc3545', '#ffc107', '#0dcaf0']
-                }]
-            },
-            options: {
-                responsive: true,
-                animation: false,
-                cutout: '70%',
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                    }
-                }
-            }
-        });
-
-        // Fetch dashboard stats from API
-        async function fetchStats() {
-            try {
-                const res = await fetch('/api/stats');
-                const data = await res.json();
-
-                document.getElementById('totalTasks').innerText = data.total_tasks;
-                document.getElementById('pendingTasks').innerText = data.pending_tasks;
-                document.getElementById('completedTasks').innerText = data.completed_tasks;
-                document.getElementById('connectedWorkers').innerText = data.connected_workers;
-
-                // Update line chart data
-                tasksChart.data.labels = data.task_times;
-                tasksChart.data.datasets[0].data = data.task_counts;
-                tasksChart.update();
-
-                // Update doughnut chart data
-                resultsChart.data.labels = Object.keys(data.result_distribution);
-                resultsChart.data.datasets[0].data = Object.values(data.result_distribution);
-                resultsChart.update();
-
-            } catch (err) {
-                console.error("Failed to fetch stats", err);
-            }
-        }
-
-        // Refresh stats every 3 seconds
-        fetchStats();
-        setInterval(fetchStats, 3000);
-    </script>
-
+    <h1>WinRay Worker Dashboard</h1>
+    <table>
+        <tr>
+            <th>ID</th><th>IP</th><th>Port</th><th>CPU</th><th>RAM</th><th>Status</th>
+        </tr>
+        {% for id, w in workers.items() %}
+        <tr>
+            <td>{{ id }}</td>
+            <td>{{ w.ip }}</td>
+            <td>{{ w.port }}</td>
+            <td>{{ w.cpu }}%</td>
+            <td>{{ w.ram }}%</td>
+            <td class="{{ 'online' if w.status == 'Online' else 'offline' }}">{{ w.status }}</td>
+        </tr>
+        {% endfor %}
+    </table>
 </body>
 </html>

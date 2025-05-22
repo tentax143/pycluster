@@ -1,33 +1,48 @@
 import requests
 import time
 import uuid
+import psutil
 
-WORKER_ID = str(uuid.uuid4())  # unique ID per worker instance
-HEAD_URL = "http://localhost:5000"
+WORKER_PORT = 9000  # Reserved for future use
 
-def register_worker():
+def get_metrics():
+    return psutil.cpu_percent(interval=1), psutil.virtual_memory().percent
+
+def register_worker(head_url, worker_id):
+    cpu, ram = get_metrics()
     try:
-        resp = requests.post(f"{HEAD_URL}/register_worker", json={"worker_id": WORKER_ID})
-        if resp.ok:
-            print("Registered worker with head node.")
+        res = requests.post(
+            f"{head_url}/register",
+            json={"id": worker_id, "port": WORKER_PORT, "cpu": cpu, "ram": ram},
+            timeout=5
+        )
+        if res.status_code == 200:
+            print(f"[WORKER] Registered with ID {worker_id}")
+            return True
         else:
-            print(f"Failed to register worker: {resp.text}")
+            print(f"[ERROR] Registration failed: {res.text}")
     except Exception as e:
-        print(f"Failed to register worker: {e}")
+        print(f"[ERROR] Failed to register: {e}")
+    return False
 
-def worker_loop():
-    while True:
-        register_worker()
-        print("No tasks available. Waiting...")  # your existing logic can be here
-        time.sleep(10)  # send heartbeat every 10 seconds
-def start_worker():
-    # Your worker logic here
-    print("Worker started, connecting to head node at http://localhost:5000")
-    # Example placeholder loop to simulate worker behavior
-    while True:
-        print("No tasks available. Waiting...")
+def send_heartbeat(head_url, worker_id):
+    try:
+        res = requests.post(f"{head_url}/heartbeat", json={"id": worker_id}, timeout=5)
+        if res.status_code == 200:
+            print("[HEARTBEAT] ✅")
+        else:
+            print("[HEARTBEAT] ❌ Worker not found")
+    except Exception as e:
+        print(f"[ERROR] Heartbeat failed: {e}")
+
+def run_worker(head_ip):
+    head_url = f"http://{head_ip}:5000"
+    worker_id = str(uuid.uuid4())
+
+    while not register_worker(head_url, worker_id):
+        print("[RETRY] Retrying in 5 seconds...")
         time.sleep(5)
 
-if __name__ == "__main__":
-    print(f"Worker started with ID: {WORKER_ID}")
-    worker_loop()
+    while True:
+        send_heartbeat(head_url, worker_id)
+        time.sleep(10)
