@@ -1,6 +1,6 @@
 # PyCluster: Distributed Python Computing for Windows with LLM & GPU Support
 
-![PyCluster Dashboard Screenshot](https://github.com/pycluster/pycluster/blob/main/docs/dashboard_screenshot.png?raw=true)
+![PyCluster Dashboard Screenshot]([https://github.com/pycluster/pycluster/blob/main/docs/dashboard_screenshot.png?raw=true](https://github.com/tentax143/pycluster/blob/main/pycluster-dashboard/dist/assets/1747929076903.jpeg?raw=true))
 
 PyCluster is a robust, Windows-first distributed computing framework built on Dask, designed to simplify the creation and management of Python clusters. It features a head node/worker architecture, comprehensive GPU monitoring, and powerful capabilities for deploying and serving Large Language Models (LLMs) across your cluster. With its intuitive web dashboard and new easy worker joining features, PyCluster makes distributed computing accessible and efficient.
 
