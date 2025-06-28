@@ -1,228 +1,478 @@
-# PyCluster: Distributed Python Computing for Windows with LLM & GPU Support
+# PyCluster Codebase Index
 
-![PyCluster Dashboard Screenshot](https://github.com/tentax143/pycluster/blob/main/pycluster-dashboard/dist/assets/1747929076903.jpeg?raw=true)
+## Overview
+PyCluster is a Windows-first distributed computing framework built on Dask, designed to simplify the creation and management of Python clusters. It features a head node/worker architecture, comprehensive GPU monitoring, and powerful capabilities for deploying and serving Large Language Models (LLMs) across your cluster.
 
-PyCluster is a robust, Windows-first distributed computing framework built on Dask, designed to simplify the creation and management of Python clusters. It features a head node/worker architecture, comprehensive GPU monitoring, and powerful capabilities for deploying and serving Large Language Models (LLMs) across your cluster. With its intuitive web dashboard and new easy worker joining features, PyCluster makes distributed computing accessible and efficient.
+**Version**: 0.3.0  
+**License**: MIT  
+**Python**: 3.8+  
+**Platform**: Windows (primary), Linux/macOS (experimental)
 
-## ✨ Key Features
+## Project Structure
 
--   **Head Node / Worker Architecture**: Easily designate one system as the head node and others as workers for distributed task execution.
--   **Windows Optimized**: Designed with Windows compatibility in mind, including specific fixes, performance optimizations, and firewall considerations.
--   **Enhanced Web Dashboard**: A modern, intuitive React-based dashboard for real-time monitoring of cluster health, worker status, resource utilization (CPU, Memory, Network, Disk), and GPU metrics.
--   **NVIDIA GPU Integration**: Comprehensive monitoring of NVIDIA GPUs (temperature, memory usage, utilization) and intelligent resource allocation for LLM workloads.
--   **Large Language Model (LLM) Support**: Built-in capabilities for deploying and serving LLMs (e.g., DeepSeek, Code Llama) across your cluster, supporting distributed inference and model sharding.
--   **Easy Worker Joining**: New auto-discovery and interactive tools simplify the process of adding worker nodes to your cluster, eliminating the need for manual IP address configuration.
--   **REST API**: A Flask-based API for programmatic control and integration with other systems.
--   **Comprehensive Testing**: Robust test suite ensuring reliability and performance.
--   **Detailed Documentation**: Extensive guides for setup, usage, and troubleshooting.
-
-## 🚀 Quick Start
-
-### 1. Installation
-
-**Prerequisites:**
--   Python 3.8+ (Anaconda/Miniconda recommended for environment management)
--   Windows Operating System (Linux/macOS support is experimental)
--   (Optional for GPU support) NVIDIA GPU with CUDA drivers installed
-
-**Clone the repository (or extract the provided zip):**
-
-```bash
-git clone https://github.com/pycluster/pycluster.git
-cd pycluster
+```
+pycluster_working_copy/
+├── pycluster/                          # Main PyCluster package
+│   ├── pycluster/                      # Core Python package
+│   │   ├── __init__.py                 # Package initialization & exports
+│   │   ├── cluster.py                  # Core Dask cluster management
+│   │   ├── node.py                     # HeadNode & WorkerNode classes
+│   │   ├── cli.py                      # Original CLI (legacy)
+│   │   ├── cli_enhanced.py             # Enhanced CLI with Windows fixes
+│   │   ├── dashboard.py                # Dashboard integration
+│   │   ├── gpu_monitor.py              # NVIDIA GPU monitoring
+│   │   ├── llm_serving.py              # LLM deployment & serving
+│   │   ├── network_utils.py            # Network utilities
+│   │   ├── windows_fixes.py            # Windows-specific bug fixes
+│   │   ├── windows_utils.py            # Windows utility functions
+│   │   └── worker_discovery.py         # Auto-discovery & easy join
+│   ├── examples/                       # Usage examples
+│   │   ├── basic_example.py            # Basic cluster setup
+│   │   ├── llm_example.py              # LLM deployment example
+│   │   ├── deepseek_example.py         # DeepSeek model example
+│   │   └── multi_machine_example.py    # Multi-machine setup
+│   ├── tests/                          # Test suite
+│   │   ├── test_pycluster.py           # Core functionality tests
+│   │   └── test_enhanced_features.py   # Enhanced features tests
+│   ├── join_worker.py                  # Standalone worker join script
+│   ├── setup.py                        # Package setup
+│   ├── pyproject.toml                  # Project configuration
+│   └── README.md                       # Main documentation
+├── pycluster-api/                      # Flask REST API backend
+│   ├── src/
+│   │   ├── main.py                     # Flask app entry point
+│   │   ├── routes/
+│   │   │   ├── cluster.py              # Cluster management API
+│   │   │   ├── llm.py                  # LLM management API
+│   │   │   └── user.py                 # User management API
+│   │   ├── models/
+│   │   │   └── user.py                 # User model
+│   │   └── database/
+│   │       └── app.db                  # SQLite database
+│   └── requirements.txt                # API dependencies
+└── pycluster-dashboard/                # React web dashboard frontend
 ```
 
-**Create and activate a Python environment:**
+## Core Components
 
+### 1. Cluster Management (`cluster.py`)
+**Purpose**: Core Dask cluster management functionality
+
+**Key Classes**:
+- `ClusterManager`: Main cluster management class
+  - `start_head_node()`: Start scheduler and dashboard
+  - `add_worker()`: Add worker nodes to cluster
+  - `submit_task()`: Submit individual tasks
+  - `map_tasks()`: Map tasks across workers
+  - `get_cluster_info()`: Get cluster status
+
+**Key Features**:
+- Head node/worker architecture
+- Task submission and execution
+- Cluster monitoring and status reporting
+- Windows compatibility fixes
+
+### 2. Node Management (`node.py`)
+**Purpose**: Simplified interfaces for head and worker nodes
+
+**Key Classes**:
+- `HeadNode`: Simplified head node interface
+  - `start()`: Start head node with optional local workers
+  - `get_connection_info()`: Get connection details
+  - `get_cluster_status()`: Get cluster status
+  - `shutdown()`: Graceful shutdown
+
+- `WorkerNode`: Simplified worker node interface
+  - `start()`: Connect to scheduler and start workers
+  - `get_status()`: Get worker status
+  - `shutdown()`: Graceful shutdown
+
+### 3. LLM Serving (`llm_serving.py`)
+**Purpose**: Large Language Model deployment and inference
+
+**Key Classes**:
+- `LLMWorker`: Worker for LLM inference on specific GPUs
+  - `load_model()`: Load model onto assigned GPUs
+  - `submit_request()`: Submit inference requests
+  - `_process_request()`: Process inference requests
+
+- `LLMClusterManager`: Cluster-wide LLM management
+  - `deploy_model()`: Deploy model across cluster
+  - `inference()`: Perform distributed inference
+  - `get_deployment_status()`: Check deployment status
+  - `undeploy_model()`: Remove model deployment
+
+**Data Classes**:
+- `LLMRequest`: Inference request structure
+- `LLMResponse`: Inference response structure
+- `LLMModelInfo`: Model information
+
+### 4. GPU Monitoring (`gpu_monitor.py`)
+**Purpose**: Comprehensive NVIDIA GPU monitoring and resource management
+
+**Key Classes**:
+- `GPUMonitor`: NVIDIA GPU monitoring using NVML
+  - `get_gpu_info()`: Get detailed GPU information
+  - `get_system_metrics()`: Get comprehensive system metrics
+  - `start_monitoring()`: Start continuous monitoring
+  - `get_gpu_summary()`: Get GPU summary statistics
+
+- `LLMResourceManager`: LLM-specific resource management
+  - `estimate_llm_memory_requirements()`: Estimate model memory needs
+  - `find_suitable_gpus()`: Find GPUs with sufficient memory
+  - `plan_llm_deployment()`: Plan optimal deployment strategy
+  - `allocate_resources()`: Allocate GPU resources
+
+**Data Classes**:
+- `GPUInfo`: Detailed GPU information
+- `SystemMetrics`: System-wide metrics
+
+### 5. Worker Discovery (`worker_discovery.py`)
+**Purpose**: Automatic cluster discovery and easy worker joining
+
+**Key Classes**:
+- `ClusterDiscovery`: Automatic cluster discovery
+  - `start_broadcasting()`: Broadcast cluster information
+  - `start_discovery()`: Listen for cluster broadcasts
+  - `get_discovered_clusters()`: Get discovered clusters
+
+- `EasyWorkerJoin`: Simplified worker joining
+  - `discover_clusters()`: Discover available clusters
+  - `join_cluster_interactive()`: Interactive cluster joining
+  - `join_cluster_by_name()`: Join specific cluster by name
+  - `test_connection()`: Test cluster connectivity
+
+**Data Classes**:
+- `ClusterInfo`: Cluster information for discovery
+
+### 6. Windows Utilities (`windows_fixes.py`, `windows_utils.py`)
+**Purpose**: Windows-specific optimizations and fixes
+
+**Key Features**:
+- Windows event loop fixes
+- Firewall configuration assistance
+- Port availability checking
+- Performance optimizations
+- Configuration management
+
+### 7. Enhanced CLI (`cli_enhanced.py`)
+**Purpose**: Command-line interface with Windows support
+
+**Key Features**:
+- Head node startup: `python -m pycluster.cli_enhanced --verbose`
+- Worker node startup: `python -m pycluster.cli_enhanced worker --scheduler tcp://IP:8786`
+- Windows diagnostics: `--diagnose` flag
+- Verbose logging: `--verbose` flag
+- Configuration file support: `--config` flag
+
+## API Backend (`pycluster-api/`)
+
+### Flask Application (`src/main.py`)
+**Purpose**: REST API server for cluster management
+
+**Key Features**:
+- CORS support for cross-origin requests
+- Static file serving for dashboard
+- Database initialization
+- LLM manager initialization
+
+### API Routes
+
+#### Cluster Management (`src/routes/cluster.py`)
+**Endpoints**:
+- `GET /api/cluster/status`: Get cluster status
+- `POST /api/cluster/start-head`: Start head node
+- `POST /api/cluster/start-worker`: Start worker node
+- `POST /api/cluster/connect`: Connect to existing cluster
+- `POST /api/cluster/shutdown`: Shutdown cluster
+- `POST /api/cluster/submit-task`: Submit computation task
+- `GET /api/cluster/dashboard-info`: Get dashboard information
+- `GET /api/cluster/workers`: Get worker information
+- `GET /api/cluster/metrics`: Get cluster metrics
+- `GET /api/cluster/health`: Health check
+
+#### LLM Management (`src/routes/llm.py`)
+**Endpoints**:
+- `GET /api/llm/health`: LLM service health check
+- `GET /api/llm/gpu/status`: Get GPU status
+- `GET /api/llm/models`: List deployed models
+- `POST /api/llm/models/deploy`: Deploy new model
+- `GET /api/llm/models/<id>/status`: Get model deployment status
+- `POST /api/llm/models/<id>/inference`: Perform inference
+- `DELETE /api/llm/models/<id>`: Undeploy model
+- `GET /api/llm/resources/status`: Get resource status
+- `GET /api/llm/models/available`: Get available models
+
+#### User Management (`src/routes/user.py`)
+**Endpoints**:
+- User authentication and management
+- Session handling
+
+## Examples
+
+### Basic Example (`examples/basic_example.py`)
+Demonstrates:
+- Head node startup with local workers
+- Dashboard integration
+- Task submission and execution
+- Cluster monitoring
+
+### LLM Example (`examples/llm_example.py`)
+Demonstrates:
+- GPU monitoring initialization
+- LLM deployment planning
+- Model deployment and inference
+- Resource management
+- Cleanup procedures
+
+### DeepSeek Example (`examples/deepseek_example.py`)
+Demonstrates:
+- DeepSeek model deployment
+- Advanced LLM configuration
+- Distributed inference
+
+### Multi-Machine Example (`examples/multi_machine_example.py`)
+Demonstrates:
+- Multi-machine cluster setup
+- Worker node joining
+- Distributed task execution
+
+## Testing
+
+### Test Suite (`tests/`)
+**Files**:
+- `test_pycluster.py`: Core functionality tests
+- `test_enhanced_features.py`: Enhanced features tests
+
+**Test Coverage**:
+- Cluster manager functionality
+- Head node and worker node operations
+- Dashboard integration
+- Windows utilities
+- Network discovery
+- Integration workflows
+
+## Key Features
+
+### 1. Distributed Computing
+- Dask-based distributed task execution
+- Head node/worker architecture
+- Automatic load balancing
+- Fault tolerance and recovery
+
+### 2. GPU Support
+- NVIDIA GPU monitoring via NVML
+- Memory usage tracking
+- Temperature and power monitoring
+- Process-level GPU usage tracking
+- Intelligent resource allocation
+
+### 3. LLM Capabilities
+- Model deployment across cluster
+- Distributed inference
+- Model sharding support
+- Resource-aware deployment planning
+- Multiple model support
+
+### 4. Windows Optimization
+- Windows-specific fixes and optimizations
+- Firewall configuration assistance
+- Event loop compatibility
+- Performance tuning
+
+### 5. Easy Worker Joining
+- Automatic cluster discovery
+- Interactive worker joining
+- Network broadcast-based discovery
+- Connection testing and validation
+
+### 6. Web Dashboard
+- Real-time cluster monitoring
+- Resource utilization tracking
+- GPU metrics visualization
+- Task execution monitoring
+
+### 7. REST API
+- Programmatic cluster control
+- LLM management endpoints
+- Integration with external systems
+- Cross-platform compatibility
+
+## Dependencies
+
+### Core Dependencies
+- `dask[complete]>=2023.1.0`: Distributed computing framework
+- `distributed>=2023.1.0`: Dask distributed scheduler
+- `psutil>=5.8.0`: System monitoring
+- `requests>=2.25.0`: HTTP requests
+- `flask>=2.0.0`: Web framework
+- `flask-cors>=3.0.0`: CORS support
+- `pynvml>=11.4.1`: NVIDIA GPU monitoring
+- `torch>=1.12.0`: PyTorch for LLM support
+- `transformers>=4.20.0`: Hugging Face transformers
+- `numpy>=1.21.0`: Numerical computing
+- `pandas>=1.3.0`: Data manipulation
+
+### Optional Dependencies
+- `dask-cuda>=22.0.0`: CUDA support for Dask
+- `cupy-cuda11x>=10.0.0`: GPU-accelerated computing
+- `cudf-cu11>=22.0.0`: GPU-accelerated dataframes
+
+### Development Dependencies
+- `pytest>=6.0`: Testing framework
+- `pytest-cov>=2.0`: Test coverage
+- `black>=21.0`: Code formatting
+- `flake8>=3.8`: Linting
+- `mypy>=0.800`: Type checking
+
+## Configuration
+
+### Project Configuration (`pyproject.toml`)
+- Package metadata and versioning
+- Dependency specifications
+- Build system configuration
+- Development tools configuration
+
+### Package Setup (`setup.py`)
+- Package installation configuration
+- Entry points definition
+- Package data inclusion
+
+## Usage Patterns
+
+### 1. Quick Start
 ```bash
-conda create -n pycluster_env python=3.9
-conda activate pycluster_env
-```
-
-**Install PyCluster and its dependencies:**
-
-```bash
-pip install .
-# For GPU support (requires NVIDIA drivers and CUDA toolkit):
-pip install .[gpu]
-```
-
-### 2. Start the Head Node
-
-Open a command prompt (preferably as Administrator to avoid firewall issues) and run:
-
-```bash
+# Start head node
 python -m pycluster.cli_enhanced --verbose
-```
 
-This will start the Dask scheduler, a local Dask worker (by default 2 workers), and the web dashboard. You will see output similar to this:
-
-```
-✓ Head node started successfully!
-  Cluster: pycluster
-  Scheduler: tcp://YOUR_HEAD_NODE_IP:8786
-  Dashboard: http://YOUR_HEAD_NODE_IP:8787
-  Workers: 2
-
-Windows users:
-  - Dashboard may take a moment to load
-  - If connection fails, check Windows Firewall
-  - Run as Administrator if needed
-
-Press Ctrl+C to stop the cluster
-```
-
-Access the dashboard in your web browser at `http://localhost:8787` (or `http://YOUR_HEAD_NODE_IP:8787`).
-
-### 3. Join Worker Nodes (Easy Way!)
-
-On any machine you want to add as a worker (ensure PyCluster is installed on it), open a new command prompt, activate your Python environment, navigate to the `pycluster` directory, and run:
-
-```bash
+# Join worker (on another machine)
 python join_worker.py
 ```
 
-This script will automatically discover available PyCluster head nodes on your network and guide you through an interactive selection process. You can also use other options:
-
--   **Auto-join first available**: `python join_worker.py --auto`
--   **Join by cluster name**: `python join_worker.py --cluster-name "my-cluster"`
--   **List available clusters**: `python join_worker.py --list`
--   **Manual join (if auto-discovery fails)**: `python join_worker.py --scheduler tcp://YOUR_HEAD_NODE_IP:8786`
-
-Once connected, the worker will appear in your dashboard.
-
-### 4. Run a Distributed Task (Example)
-
-Create a Python file (e.g., `my_task.py`):
-
+### 2. Programmatic Usage
 ```python
-# my_task.py
+from pycluster import HeadNode, ClusterManager
 
-import time
-from pycluster import ClusterManager
-
-def square(x):
-    time.sleep(1) # Simulate work
-    return x * x
-
-if __name__ == "__main__":
-    # Connect to the running cluster
-    # If running on the same machine as head node, use localhost
-    # Otherwise, use the head node's actual IP
-    cluster_manager = ClusterManager(scheduler_address="tcp://localhost:8786")
+# Start head node
+with HeadNode("my-cluster") as head:
+    head.start(n_local_workers=2)
     
-    print("Submitting tasks to the cluster...")
-    futures = cluster_manager.submit_tasks([square for _ in range(10)], range(10))
-    
-    results = [f.result() for f in futures]
-    print(f"Results: {results}")
-    
-    # You can also use the LLMClusterManager for LLM-specific tasks
-    # from pycluster import LLMClusterManager
-    # llm_manager = LLMClusterManager(scheduler_address="tcp://localhost:8786")
-    # response = llm_manager.generate_text("Tell me a joke.")
-    # print(response)
+    # Submit tasks
+    cluster_manager = head.cluster_manager
+    future = cluster_manager.submit_task(my_function, args)
+    result = future.result()
 ```
 
-Run the script:
+### 3. LLM Deployment
+```python
+from pycluster import LLMClusterManager, GPUMonitor
 
-```bash
-python my_task.py
+# Initialize GPU monitoring
+gpu_monitor = GPUMonitor()
+gpu_monitor.start_monitoring()
+
+# Deploy model
+llm_manager = LLMClusterManager(cluster_manager)
+deployment_id = llm_manager.deploy_model(
+    model_name="microsoft/DialoGPT-small",
+    model_size="1b",
+    precision="fp16"
+)
+
+# Perform inference
+response = llm_manager.inference(
+    deployment_id=deployment_id,
+    prompt="Hello, how are you?",
+    max_tokens=50
+)
 ```
 
-Observe the tasks being processed by your workers in the PyCluster dashboard!
+### 4. API Usage
+```python
+import requests
 
-## ⚙️ Project Structure
+# Start head node via API
+response = requests.post('http://localhost:5000/api/cluster/start-head', json={
+    'cluster_name': 'my-cluster',
+    'local_workers': 2
+})
 
-```
-pycluster/
-├── pycluster/                 # Core PyCluster Python package
-│   ├── __init__.py            # Package initialization, version (v0.3.1)
-│   ├── cli.py                 # Original CLI (legacy)
-│   ├── cli_enhanced.py        # Enhanced CLI with Windows fixes & diagnostics
-│   ├── cluster.py             # Core Dask cluster management
-│   ├── dashboard.py           # Dashboard integration
-│   ├── gpu_monitor.py         # NVIDIA GPU monitoring
-│   ├── llm_serving.py         # LLM deployment and serving logic
-│   ├── network_utils.py       # Network utilities for discovery
-│   ├── node.py                # HeadNode and WorkerNode classes
-│   ├── windows_fixes.py       # Windows-specific bug fixes and optimizations
-│   ├── windows_utils.py       # Windows utility functions
-│   └── worker_discovery.py    # Auto-discovery and easy join logic
-├── examples/                  # Example usage scripts
-├── tests/                     # Pytest test suite
-├── pycluster-api/             # Flask REST API backend
-│   ├── src/                   # API source code
-│   └── requirements.txt       # API dependencies
-├── pycluster-dashboard/       # React web dashboard frontend
-│   ├── public/                # Static assets
-│   ├── src/                   # React source code
-│   └── package.json           # Node.js dependencies
-├── join_worker.py             # Standalone script for easy worker joining
-├── setup.py                   # Python package setup script
-├── pyproject.toml             # Project configuration
-├── README.md                  # This file
-└── DOCUMENTATION.md           # Comprehensive project documentation
+# Deploy LLM model
+response = requests.post('http://localhost:5000/api/llm/models/deploy', json={
+    'model_name': 'microsoft/DialoGPT-small',
+    'model_size': '1b',
+    'precision': 'fp16'
+})
 ```
 
-## ⚠️ Troubleshooting
+## Architecture Patterns
 
-### 1. `Failed to start head node: Timed out trying to connect...`
+### 1. Head Node/Worker Architecture
+- Single head node with scheduler and dashboard
+- Multiple worker nodes for task execution
+- Automatic load balancing and fault tolerance
 
-This usually indicates a port blocking issue or another service using the same ports. 
+### 2. Resource Management
+- GPU-aware resource allocation
+- Memory usage monitoring and optimization
+- Intelligent deployment planning
 
--   **Solution**: 
-    -   **Run as Administrator**: Open your command prompt/PowerShell as an Administrator and try again.
-    -   **Windows Firewall**: Ensure inbound rules are created for TCP ports `8786` (scheduler), `8787` (dashboard), and `5000` (Flask API). You can use the `--diagnose` flag for help.
-    -   **Port Conflict**: Check if another application is already using these ports.
+### 3. Service Discovery
+- Network broadcast-based cluster discovery
+- Automatic worker joining
+- Connection health monitoring
 
-### 2. `TypeError: unhashable type: 'list'`
+### 4. Modular Design
+- Separated concerns (cluster, LLM, GPU, network)
+- Pluggable components
+- Extensible architecture
 
-This often points to a version incompatibility between Python's `typing` module and `dask.distributed`.
+## Performance Considerations
 
--   **Solution**: 
-    -   Update `typing_extensions`: `pip install --upgrade typing_extensions`
-    -   Update Dask and Distributed: `pip install --upgrade dask distributed`
+### 1. Windows Optimization
+- Event loop compatibility fixes
+- Firewall configuration assistance
+- Performance tuning for Windows environments
 
-### 3. `WorkerNode.start() got an unexpected keyword argument 'scheduler_address'` or `AttributeError: 'WorkerNode' object has no attribute 'connect_to_cluster'`
+### 2. GPU Utilization
+- Memory-aware model loading
+- Multi-GPU support
+- Efficient resource allocation
 
-These errors indicate that your PyCluster installation is outdated or corrupted.
+### 3. Network Efficiency
+- Optimized task distribution
+- Connection pooling
+- Minimal network overhead
 
--   **Solution**: 
-    -   **Clean Reinstallation**: 
-        1.  Navigate to the root `pycluster` directory.
-        2.  Run `pip uninstall pycluster` (confirm with `y`).
-        3.  Delete any `__pycache__` folders in the `pycluster` directory.
-        4.  Run `pip install .` (or `pip install .[gpu]`) to reinstall the latest version.
+## Security Features
 
-### 4. Dashboard Not Accessible
+### 1. Network Security
+- Configurable firewall rules
+- Secure cluster communication
+- Authentication support (via API)
 
--   **Solution**: 
-    -   **Firewall**: Most common cause. Ensure ports `8787` and `5000` are open in your Windows Firewall.
-    -   **Run as Administrator**: Try starting the head node as an administrator.
-    -   **Correct URL**: Use `http://localhost:8787` if running on the same machine.
-    -   **Flask API**: Ensure the Flask API is running. You can test its health at `http://localhost:5000/api/cluster/health`.
+### 2. Resource Isolation
+- Process-level isolation
+- Memory limits per worker
+- GPU resource allocation
 
-### 5. Workers Not Joining / No Clusters Found
+## Future Enhancements
 
--   **Solution**: 
-    -   **Head Node Running**: Ensure your head node is actively running and broadcasting.
-    -   **Network Connectivity**: Verify that the worker machine can reach the head node machine (e.g., by `ping`ing the head node's IP).
-    -   **Windows Firewall (Worker)**: Ensure the worker's firewall allows outbound connections and inbound connections on UDP port `8788` for discovery.
-    -   **Run as Administrator**: Try running the `join_worker.py` script as an administrator.
+### 1. Planned Features
+- Kubernetes integration
+- Cloud deployment support
+- Advanced monitoring and alerting
+- Model versioning and management
 
-For more detailed troubleshooting and advanced configurations, please refer to the `DOCUMENTATION.md` file.
+### 2. Performance Improvements
+- Enhanced GPU utilization
+- Better memory management
+- Optimized task scheduling
 
-## 🤝 Contributing
+### 3. Developer Experience
+- Enhanced CLI tools
+- Better error handling
+- Comprehensive documentation
+- More examples and tutorials
 
-We welcome contributions to PyCluster! If you have suggestions, bug reports, or want to contribute code, please open an issue or pull request on the GitHub repository.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the `LICENSE` file for details.
-
----
-
-**Happy Distributed Computing with PyCluster!** 🎉
-
-
+This index provides a comprehensive overview of the PyCluster codebase, its components, architecture, and usage patterns. The framework is designed to be Windows-first while maintaining cross-platform compatibility, with a focus on ease of use and powerful distributed computing capabilities.
