@@ -45,7 +45,7 @@ class HeadNode:
             self.discovery = None
             logger.warning("Worker discovery not available")
     
-    def start(self, n_local_workers: int = 0) -> Dict[str, Any]:
+    async def start(self, n_local_workers: int = 0) -> Dict[str, Any]:
         """
         Start the head node.
         
@@ -58,7 +58,7 @@ class HeadNode:
         if self.is_running:
             return {"status": "already_running"}
         
-        result = self.cluster_manager.start_head_node(
+        result = await self.cluster_manager.start_head_node(
             host=self.host,
             scheduler_port=self.scheduler_port,
             dashboard_port=self.dashboard_port,
@@ -176,7 +176,7 @@ class WorkerNode:
         self.cluster_manager = ClusterManager()
         self.is_running = False
     
-    def start(self, 
+    async def start(self, 
               n_workers: int = 1,
               threads_per_worker: int = None,
               memory_limit: str = "auto") -> Dict[str, Any]:
@@ -194,7 +194,7 @@ class WorkerNode:
         if self.is_running:
             return {"status": "already_running"}
         
-        result = self.cluster_manager.add_worker(
+        result = await self.cluster_manager.add_worker(
             scheduler_address=self.scheduler_address,
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,

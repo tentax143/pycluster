@@ -6,6 +6,9 @@ using Dask as the underlying framework. It supports head node/worker architectur
 similar to Ray but with better Windows compatibility and LLM serving capabilities.
 """
 
+# Apply typing compatibility fixes first
+from . import typing_fix
+
 __version__ = "0.3.0"
 __author__ = "PyCluster Development Team"
 

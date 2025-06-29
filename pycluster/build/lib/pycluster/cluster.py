@@ -38,7 +38,7 @@ class ClusterManager:
         self.scheduler_process = None
         self.worker_processes = []
         
-    def start_head_node(self, 
+    async def start_head_node(self, 
                        host: str = "0.0.0.0", 
                        scheduler_port: int = 8786,
                        dashboard_port: int = 8787,
@@ -66,8 +66,7 @@ class ClusterManager:
                     n_workers=n_local_workers,
                     scheduler_port=scheduler_port,
                     dashboard_address=f":{dashboard_port}",
-                    host=host,
-                    processes=True
+                    host=host
                 )
                 self.client = Client(self.cluster)
             else:
@@ -77,54 +76,42 @@ class ClusterManager:
                 
                 # Apply Windows fixes
                 fix_windows_event_loop()
-                
-                self.scheduler = Scheduler(
+                self.scheduler = await start_scheduler_safely(
                     host=host,
                     port=scheduler_port,
                     dashboard_address=f":{dashboard_port}"
                 )
                 
-                # Use the safe scheduler startup method
-                try:
-                    self.scheduler = start_scheduler_safely(self.scheduler, timeout=60)
-                    logger.info("Scheduler started successfully")
-                except Exception as e:
-                    logger.error(f"Failed to start scheduler: {e}")
-                    raise
-                
-                # Wait a moment for scheduler to be ready
-                import time
-                time.sleep(2)
-                
-                self.client = Client(self.scheduler_address)
-            
             self.is_head_node = True
             
-            logger.info(f"Head node started successfully")
-            logger.info(f"Scheduler address: {self.scheduler_address}")
-            logger.info(f"Dashboard address: {self.dashboard_address}")
+            # Get actual IP for connection info
+            actual_host = host
+            if host == "0.0.0.0":
+                actual_host = socket.gethostbyname(socket.gethostname())
             
             return {
                 "status": "success",
-                "scheduler_address": self.scheduler_address,
-                "dashboard_address": self.dashboard_address,
-                "cluster_name": self.cluster_name
+                "cluster_name": self.cluster_name,
+                "scheduler_address": f"tcp://{actual_host}:{scheduler_port}",
+                "dashboard_address": f"http://{actual_host}:{dashboard_port}",
+                "host": actual_host,
+                "n_local_workers": n_local_workers
             }
             
         except Exception as e:
-            logger.error(f"Failed to start head node: {str(e)}")
+            logger.error(f"Failed to start head node: {e}")
             return {
                 "status": "error",
                 "message": str(e)
             }
     
-    def add_worker(self, 
+    async def add_worker(self, 
                    scheduler_address: str,
                    n_workers: int = 1,
                    threads_per_worker: int = None,
                    memory_limit: str = "auto") -> Dict[str, Any]:
         """
-        Add worker(s) to an existing cluster.
+        Add worker nodes to the cluster.
         
         Args:
             scheduler_address: Address of the scheduler to connect to
@@ -136,10 +123,9 @@ class ClusterManager:
             Dictionary with worker information
         """
         try:
-            if threads_per_worker is None:
-                threads_per_worker = psutil.cpu_count()
+            self.scheduler_address = scheduler_address
             
-            # Start workers
+            # Create workers
             for i in range(n_workers):
                 worker = Worker(
                     scheduler_address,
@@ -147,72 +133,43 @@ class ClusterManager:
                     memory_limit=memory_limit,
                     name=f"worker-{socket.gethostname()}-{i}"
                 )
-                worker.start()
+                
+                # Start worker in a separate thread
+                worker_thread = threading.Thread(
+                    target=self._start_worker_thread,
+                    args=(worker,),
+                    daemon=True
+                )
+                worker_thread.start()
+                self.worker_processes.append(worker_thread)
                 self.workers.append(worker)
             
-            # Connect client if not already connected
-            if self.client is None:
-                self.client = Client(scheduler_address)
-                self.scheduler_address = scheduler_address
-            
-            logger.info(f"Added {n_workers} worker(s) to cluster")
+            # Create client for task submission
+            self.client = Client(scheduler_address)
             
             return {
                 "status": "success",
                 "workers_added": n_workers,
-                "total_workers": len(self.workers)
+                "scheduler_address": scheduler_address
             }
             
         except Exception as e:
-            logger.error(f"Failed to add workers: {str(e)}")
+            logger.error(f"Failed to add workers: {e}")
             return {
                 "status": "error",
                 "message": str(e)
             }
     
-    def get_cluster_info(self) -> Dict[str, Any]:
-        """
-        Get information about the current cluster state.
-        
-        Returns:
-            Dictionary with cluster information
-        """
-        if self.client is None:
-            return {"status": "not_connected"}
-        
+    def _start_worker_thread(self, worker):
+        """Start a worker in a separate thread."""
         try:
-            info = self.client.scheduler_info()
-            workers_info = []
-            
-            for worker_id, worker_info in info.get("workers", {}).items():
-                workers_info.append({
-                    "id": worker_id,
-                    "host": worker_info.get("host"),
-                    "nthreads": worker_info.get("nthreads"),
-                    "memory_limit": worker_info.get("memory_limit"),
-                    "status": worker_info.get("status")
-                })
-            
-            return {
-                "status": "connected",
-                "cluster_name": self.cluster_name,
-                "scheduler_address": self.scheduler_address,
-                "dashboard_address": self.dashboard_address,
-                "total_workers": len(workers_info),
-                "workers": workers_info,
-                "is_head_node": self.is_head_node
-            }
-            
+            worker.start()
         except Exception as e:
-            logger.error(f"Failed to get cluster info: {str(e)}")
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+            logger.error(f"Worker failed to start: {e}")
     
     def submit_task(self, func, *args, **kwargs):
         """
-        Submit a task to the cluster for execution.
+        Submit a task to the cluster.
         
         Args:
             func: Function to execute
@@ -220,55 +177,96 @@ class ClusterManager:
             **kwargs: Keyword arguments for the function
             
         Returns:
-            Future object representing the computation
+            Future object for the task
         """
-        if self.client is None:
-            raise RuntimeError("Not connected to a cluster")
+        if not self.client:
+            raise RuntimeError("No client connected to cluster")
         
         return self.client.submit(func, *args, **kwargs)
     
-    def map_tasks(self, func, *iterables, **kwargs):
+    def map_tasks(self, func, data):
         """
-        Map a function over iterables in parallel across the cluster.
+        Map a function over data using the cluster.
         
         Args:
-            func: Function to map
-            *iterables: Iterables to map over
-            **kwargs: Additional keyword arguments
+            func: Function to apply
+            data: Data to map over
             
         Returns:
             List of Future objects
         """
-        if self.client is None:
-            raise RuntimeError("Not connected to a cluster")
+        if not self.client:
+            raise RuntimeError("No client connected to cluster")
         
-        return self.client.map(func, *iterables, **kwargs)
+        return self.client.map(func, data)
+    
+    def get_cluster_info(self) -> Dict[str, Any]:
+        """
+        Get information about the cluster.
+        
+        Returns:
+            Dictionary with cluster information
+        """
+        if not self.client:
+            return {
+                "status": "not_connected",
+                "message": "No client connected to cluster"
+            }
+        
+        try:
+            info = self.client.scheduler_info()
+            workers = list(info['workers'].values())
+            
+            return {
+                "status": "connected",
+                "cluster_name": self.cluster_name,
+                "scheduler_address": self.scheduler_address,
+                "dashboard_address": self.dashboard_address,
+                "total_workers": len(workers),
+                "total_cores": sum(w.get('nthreads', 1) for w in workers),
+                "total_memory": sum(w.get('memory', 0) for w in workers),
+                "workers": workers
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": str(e)
+            }
     
     def shutdown(self):
-        """
-        Shutdown the cluster and clean up resources.
-        """
+        """Shutdown the cluster and cleanup resources."""
         try:
             if self.client:
                 self.client.close()
             
+            # Stop workers
             for worker in self.workers:
-                worker.close()
+                try:
+                    worker.close()
+                except:
+                    pass
             
-            if hasattr(self, 'cluster'):
-                self.cluster.close()
+            # Stop scheduler if we started it
+            if hasattr(self, 'scheduler') and self.scheduler:
+                try:
+                    self.scheduler.close()
+                except:
+                    pass
             
-            if hasattr(self, 'scheduler'):
-                self.scheduler.close()
+            # Stop cluster if we created it
+            if hasattr(self, 'cluster') and self.cluster:
+                try:
+                    self.cluster.close()
+                except:
+                    pass
             
             logger.info("Cluster shutdown completed")
             
         except Exception as e:
-            logger.error(f"Error during shutdown: {str(e)}")
+            logger.error(f"Error during shutdown: {e}")
     
     def __enter__(self):
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.shutdown()
-

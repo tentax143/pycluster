@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def main():
+async def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(description='PyCluster - Distributed Computing with LLM Support')
     
@@ -42,6 +42,8 @@ def main():
     worker_parser = subparsers.add_parser('worker', help='Start worker node')
     worker_parser.add_argument('--scheduler', required=True, help='Scheduler address to connect to')
     worker_parser.add_argument('--nthreads', type=int, default=None, help='Number of threads per worker')
+    worker_parser.add_argument('--n-workers', type=int, default=1, help='Number of Dask worker processes to start on this node')
+    worker_parser.add_argument('--threads-per-worker', type=int, help='Number of threads per Dask worker process')
     worker_parser.add_argument('--memory-limit', default='auto', help='Memory limit per worker')
     
     args = parser.parse_args()
@@ -74,9 +76,9 @@ def main():
     
     try:
         if args.command == 'worker' or (args.command is None and hasattr(args, 'scheduler')):
-            start_worker_node(args)
+            await start_worker_node(args)
         else:
-            start_head_node(args)
+            await start_head_node(args)
     except KeyboardInterrupt:
         logger.info("Shutting down PyCluster...")
         sys.exit(0)
@@ -95,7 +97,7 @@ def main():
         
         sys.exit(1)
 
-def start_head_node(args):
+async def start_head_node(args):
     """Start a head node"""
     from .node import HeadNode
     
@@ -106,7 +108,7 @@ def start_head_node(args):
     
     try:
         with HeadNode(args.cluster_name, host=args.host) as head:
-            result = head.start(
+            result = await head.start(
                 n_local_workers=n_workers
             )
             
@@ -139,8 +141,7 @@ def start_head_node(args):
         logger.error(f"✗ Failed to start head node: {e}")
         sys.exit(1)
 
-def start_worker_node(args):
-    """Start a worker node"""
+async def start_worker_node(args):
     from .node import WorkerNode
     
     logger.info(f"Starting PyCluster worker node")
@@ -148,9 +149,9 @@ def start_worker_node(args):
     
     try:
         with WorkerNode(scheduler_address=args.scheduler) as worker:
-            result = worker.start(
-                n_workers=1,
-                threads_per_worker=args.nthreads,
+            result = await worker.start(
+                n_workers=args.n_workers,
+                threads_per_worker=args.threads_per_worker,
                 memory_limit=args.memory_limit
             )
             
@@ -309,5 +310,6 @@ def worker_node_cli():
     main()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
 

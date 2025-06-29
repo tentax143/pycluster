@@ -22,14 +22,15 @@ except ImportError:
 
 import argparse
 
-def main():
+async def main():
     parser = argparse.ArgumentParser(description="Easy PyCluster Worker Join")
     parser.add_argument("--cluster-name", help="Specific cluster name to join")
     parser.add_argument("--scheduler", help="Direct scheduler address (e.g., tcp://192.168.1.100:8786)")
     parser.add_argument("--auto", action="store_true", help="Auto-join first available cluster")
     parser.add_argument("--list", action="store_true", help="List available clusters and exit")
     parser.add_argument("--timeout", type=float, default=10.0, help="Discovery timeout in seconds")
-    parser.add_argument("--nthreads", type=int, help="Number of threads per worker")
+    parser.add_argument("--n-workers", type=int, default=1, help="Number of Dask worker processes to start on this node")
+    parser.add_argument("--threads-per-worker", type=int, help="Number of threads per Dask worker process")
     parser.add_argument("--memory-limit", default="auto", help="Memory limit per worker")
     
     args = parser.parse_args()
@@ -110,15 +111,16 @@ def main():
     
     # Create args object for start_worker_node
     class WorkerArgs:
-        def __init__(self, scheduler_addr, nthreads=None, memory_limit="auto"):
+        def __init__(self, scheduler_addr, n_workers=1, threads_per_worker=None, memory_limit="auto"):
             self.scheduler = scheduler_addr
-            self.nthreads = nthreads
+            self.n_workers = n_workers
+            self.threads_per_worker = threads_per_worker
             self.memory_limit = memory_limit
     
-    worker_args = WorkerArgs(scheduler_address, args.nthreads, args.memory_limit)
+    worker_args = WorkerArgs(scheduler_address, args.n_workers, args.threads_per_worker, args.memory_limit)
     
     try:
-        start_worker_node(worker_args)
+        await start_worker_node(worker_args)
     except KeyboardInterrupt:
         print("\n✅ Worker stopped by user")
     except Exception as e:
@@ -126,5 +128,6 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
 
