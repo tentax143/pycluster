@@ -163,7 +163,47 @@ class ClusterManager:
     def _start_worker_thread(self, worker):
         """Start a worker in a separate thread."""
         try:
-            worker.start()
+            import asyncio
+            
+            async def run_worker():
+                """Run the worker with proper async handling"""
+                try:
+                    await worker.start()
+                    # Keep the worker running - use a different approach
+                    # Instead of worker.finished(), we'll use a loop with periodic checks
+                    while True:
+                        try:
+                            # Check if worker is still alive
+                            if hasattr(worker, 'status') and worker.status == 'closed':
+                                break
+                            await asyncio.sleep(1)
+                        except Exception:
+                            break
+                except Exception as e:
+                    logger.error(f"Worker runtime error: {e}")
+                    # Don't re-raise the exception to prevent thread crashes
+                finally:
+                    try:
+                        if hasattr(worker, 'close'):
+                            if asyncio.iscoroutinefunction(worker.close):
+                                await worker.close()
+                            else:
+                                worker.close()
+                    except:
+                        pass
+            
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(run_worker())
+            except Exception as e:
+                logger.error(f"Worker thread error: {e}")
+            finally:
+                try:
+                    loop.close()
+                except:
+                    pass
         except Exception as e:
             logger.error(f"Worker failed to start: {e}")
     
@@ -242,7 +282,13 @@ class ClusterManager:
             # Stop workers
             for worker in self.workers:
                 try:
-                    worker.close()
+                    # Handle both sync and async close methods
+                    if hasattr(worker, 'close'):
+                        if asyncio.iscoroutinefunction(worker.close):
+                            # Skip async close in sync context
+                            pass
+                        else:
+                            worker.close()
                 except:
                     pass
             

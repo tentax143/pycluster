@@ -149,9 +149,12 @@ async def start_worker_node(args):
     
     try:
         with WorkerNode(scheduler_address=args.scheduler) as worker:
+            # Handle thread configuration
+            threads_per_worker = args.threads_per_worker or args.nthreads
+            
             result = await worker.start(
                 n_workers=args.n_workers,
-                threads_per_worker=args.threads_per_worker,
+                threads_per_worker=threads_per_worker,
                 memory_limit=args.memory_limit
             )
             

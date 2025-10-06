@@ -41,9 +41,13 @@ class HeadNode:
         try:
             from .worker_discovery import ClusterDiscovery
             self.discovery = ClusterDiscovery()
-        except ImportError:
+            logger.info("Worker discovery initialized successfully")
+        except ImportError as e:
             self.discovery = None
-            logger.warning("Worker discovery not available")
+            logger.warning(f"Worker discovery not available: {e}")
+        except Exception as e:
+            self.discovery = None
+            logger.warning(f"Failed to initialize worker discovery: {e}")
     
     async def start(self, n_local_workers: int = 0) -> Dict[str, Any]:
         """
@@ -241,6 +245,12 @@ class WorkerNode:
             self.cluster_manager.shutdown()
             self.is_running = False
             logger.info(f"Worker node '{self.worker_name}' shutdown")
+    
+    def stop(self):
+        """
+        Stop the worker node.
+        """
+        self.shutdown()
     
     def __enter__(self):
         return self

@@ -420,27 +420,46 @@ class LLMClusterManager:
     
     def _load_model_on_worker(self, model_name: str, model_size: str, precision: str, gpu_indices: List[int]) -> Dict[str, Any]:
         """Load model on a specific worker (executed remotely)."""
-        worker_id = f"worker_{os.getpid()}_{threading.get_ident()}"
-        
-        # Create and start LLM worker
-        llm_worker = LLMWorker(worker_id, gpu_indices)
-        success = llm_worker.load_model(model_name, model_size, precision)
-        
-        if success:
-            llm_worker.start_worker()
+        try:
+            worker_id = f"worker_{os.getpid()}_{threading.get_ident()}"
             
-            # Store worker reference (in practice, this would be managed differently)
+            # Create and start LLM worker
+            llm_worker = LLMWorker(worker_id, gpu_indices)
+            success = llm_worker.load_model(model_name, model_size, precision)
+            
+            if success:
+                llm_worker.start_worker()
+                
+                # Store worker reference in a global registry for this worker process
+                # In a real implementation, this would be managed by a worker manager
+                if not hasattr(self, '_worker_registry'):
+                    self._worker_registry = {}
+                self._worker_registry[worker_id] = llm_worker
+                
+                return {
+                    "worker_id": worker_id,
+                    "status": "ready",
+                    "model_info": asdict(llm_worker.model_info) if llm_worker.model_info else None,
+                    "gpu_indices": gpu_indices,
+                    "model_name": model_name,
+                    "model_size": model_size,
+                    "precision": precision
+                }
+            else:
+                return {
+                    "worker_id": worker_id,
+                    "status": "error",
+                    "error": "Failed to load model",
+                    "gpu_indices": gpu_indices
+                }
+                
+        except Exception as e:
+            logger.error(f"Error loading model on worker: {e}")
             return {
-                "worker_id": worker_id,
-                "status": "ready",
-                "model_info": asdict(llm_worker.model_info),
-                "gpu_indices": gpu_indices
-            }
-        else:
-            return {
-                "worker_id": worker_id,
+                "worker_id": f"worker_{os.getpid()}_{threading.get_ident()}",
                 "status": "error",
-                "error": "Failed to load model"
+                "error": str(e),
+                "gpu_indices": gpu_indices
             }
     
     def inference(self, deployment_id: str, prompt: str, **kwargs) -> LLMResponse:
@@ -486,17 +505,138 @@ class LLMClusterManager:
     
     def _process_inference_request(self, deployment_id: str, request: LLMRequest) -> Dict[str, Any]:
         """Process inference request on worker (executed remotely)."""
-        # This would be implemented to route to the appropriate LLM worker
-        # For now, return a mock response
-        return {
-            "request_id": request.request_id,
-            "text": f"Mock response for: {request.prompt[:50]}...",
-            "tokens_generated": 20,
-            "total_tokens": 50,
-            "finish_reason": "stop",
-            "generation_time": 0.5,
-            "metadata": {"deployment_id": deployment_id}
-        }
+        try:
+            # Get deployment information
+            if deployment_id not in self.models:
+                return {
+                    "request_id": request.request_id,
+                    "text": "",
+                    "tokens_generated": 0,
+                    "total_tokens": 0,
+                    "finish_reason": "error",
+                    "generation_time": 0.0,
+                    "metadata": {"error": f"Deployment {deployment_id} not found"}
+                }
+            
+            deployment = self.models[deployment_id]
+            if deployment["status"] != "ready":
+                return {
+                    "request_id": request.request_id,
+                    "text": "",
+                    "tokens_generated": 0,
+                    "total_tokens": 0,
+                    "finish_reason": "error",
+                    "generation_time": 0.0,
+                    "metadata": {"error": f"Deployment {deployment_id} is not ready"}
+                }
+            
+            # Find available worker for this deployment
+            worker_results = deployment.get("worker_results", [])
+            if not worker_results:
+                return {
+                    "request_id": request.request_id,
+                    "text": "",
+                    "tokens_generated": 0,
+                    "total_tokens": 0,
+                    "finish_reason": "error",
+                    "generation_time": 0.0,
+                    "metadata": {"error": "No workers available for deployment"}
+                }
+            
+            # For now, use the first available worker
+            # In a real implementation, this would use load balancing
+            worker_info = worker_results[0]
+            if worker_info["status"] != "ready":
+                return {
+                    "request_id": request.request_id,
+                    "text": "",
+                    "tokens_generated": 0,
+                    "total_tokens": 0,
+                    "finish_reason": "error",
+                    "generation_time": 0.0,
+                    "metadata": {"error": "Worker not ready"}
+                }
+            
+            # Submit inference task to the specific worker
+            # This would be executed on the worker node
+            future = self.cluster_manager.submit_task(
+                self._worker_inference_task,
+                deployment_id,
+                request,
+                deployment,  # Pass deployment info
+                worker=worker_info["worker_id"]
+            )
+            
+            # Wait for result with timeout
+            result = future.result(timeout=60)
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error processing inference request: {e}")
+            return {
+                "request_id": request.request_id,
+                "text": "",
+                "tokens_generated": 0,
+                "total_tokens": 0,
+                "finish_reason": "error",
+                "generation_time": 0.0,
+                "metadata": {"error": str(e)}
+            }
+    
+    def _worker_inference_task(self, deployment_id: str, request: LLMRequest, deployment_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Task executed on worker to perform actual inference."""
+        try:
+            # This function runs on the worker node
+            # Create a temporary LLM worker for this inference
+            worker_id = f"inference_worker_{os.getpid()}_{threading.get_ident()}"
+            
+            # Use provided deployment info
+            if not deployment_info:
+                raise ValueError(f"Deployment info not provided for {deployment_id}")
+            
+            # Determine GPU indices (simplified - in real implementation this would be more sophisticated)
+            gpu_indices = list(range(deployment_info.get("gpu_per_replica", 1)))
+            
+            # Create and configure LLM worker
+            llm_worker = LLMWorker(worker_id, gpu_indices)
+            
+            # Load the model
+            success = llm_worker.load_model(
+                deployment_info["model_name"],
+                deployment_info["model_size"],
+                deployment_info["precision"]
+            )
+            
+            if not success:
+                raise RuntimeError("Failed to load model on worker")
+            
+            # Process the request
+            response = llm_worker._process_request(request)
+            
+            # Clean up
+            llm_worker.stop_worker()
+            if llm_worker.model:
+                del llm_worker.model
+            if llm_worker.tokenizer:
+                del llm_worker.tokenizer
+            
+            # Clear GPU memory
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            return asdict(response)
+            
+        except Exception as e:
+            logger.error(f"Worker inference task failed: {e}")
+            return {
+                "request_id": request.request_id,
+                "text": "",
+                "tokens_generated": 0,
+                "total_tokens": 0,
+                "finish_reason": "error",
+                "generation_time": 0.0,
+                "metadata": {"error": str(e)}
+            }
     
     def get_deployment_status(self, deployment_id: str) -> Dict[str, Any]:
         """Get status of a model deployment."""

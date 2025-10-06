@@ -20,7 +20,7 @@ app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(cluster_bp, url_prefix='/api')
 app.register_blueprint(llm_bp, url_prefix='/api')
 
-# Initialize LLM managers on startup
+# Initialize LLM managers on startup (without cluster manager initially)
 with app.app_context():
     initialize_llm_managers()
 

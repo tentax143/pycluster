@@ -79,6 +79,10 @@ def start_head_node():
             cluster_manager = head_node.cluster_manager
             conn_info = head_node.get_connection_info()
             result.update(conn_info)
+            
+            # Initialize LLM managers with the new cluster manager
+            from src.routes.llm import initialize_llm_managers
+            initialize_llm_managers(cluster_manager)
         
         return jsonify(result)
     
@@ -126,6 +130,10 @@ def start_worker_node():
         
         if result['status'] == 'success':
             cluster_manager = worker_node.cluster_manager
+            
+            # Initialize LLM managers with the new cluster manager
+            from src.routes.llm import initialize_llm_managers
+            initialize_llm_managers(cluster_manager)
         
         return jsonify(result)
     
@@ -162,6 +170,10 @@ def connect_to_cluster():
         # Try to connect
         from dask.distributed import Client
         cluster_manager.client = Client(scheduler_address)
+        
+        # Initialize LLM managers with the new cluster manager
+        from src.routes.llm import initialize_llm_managers
+        initialize_llm_managers(cluster_manager)
         
         status = cluster_manager.get_cluster_info()
         return jsonify(status)
@@ -290,12 +302,8 @@ def get_workers():
         cluster_info = cluster_manager.get_cluster_info()
         workers = cluster_info.get('workers', [])
         
-        # Enhance worker data with mock performance metrics
-        import random
+        # Add timestamp to worker data
         for worker in workers:
-            worker['cpu_usage'] = random.randint(20, 80)
-            worker['memory_usage'] = random.randint(30, 90)
-            worker['network_io'] = random.randint(10, 50)
             worker['last_seen'] = datetime.now().isoformat()
         
         return jsonify({
@@ -314,28 +322,34 @@ def get_workers():
 def get_metrics():
     """Get cluster performance metrics."""
     try:
-        # Generate mock metrics data
-        import random
-        from datetime import datetime, timedelta
+        if cluster_manager is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'No cluster connection'
+            }), 400
         
-        now = datetime.now()
-        metrics = []
+        # Get real cluster metrics
+        cluster_info = cluster_manager.get_cluster_info()
         
-        for i in range(10):
-            timestamp = now - timedelta(minutes=i*5)
-            metrics.append({
-                'timestamp': timestamp.isoformat(),
-                'cpu_usage': random.randint(30, 80),
-                'memory_usage': random.randint(40, 85),
-                'network_io': random.randint(15, 60),
-                'tasks_completed': random.randint(50, 150),
-                'tasks_pending': random.randint(5, 30),
-                'tasks_failed': random.randint(0, 5)
-            })
+        # Extract metrics from cluster info
+        metrics = {
+            'timestamp': datetime.now().isoformat(),
+            'workers_count': len(cluster_info.get('workers', [])),
+            'cluster_status': cluster_info.get('status', 'unknown'),
+            'scheduler_address': cluster_info.get('scheduler_address', 'unknown'),
+            'dashboard_url': cluster_info.get('dashboard_url', 'unknown')
+        }
+        
+        # Add worker-specific metrics if available
+        workers = cluster_info.get('workers', [])
+        if workers:
+            metrics['total_workers'] = len(workers)
+            metrics['active_workers'] = len([w for w in workers if w.get('status') == 'active'])
+            metrics['worker_addresses'] = [w.get('address', 'unknown') for w in workers]
         
         return jsonify({
             'status': 'success',
-            'metrics': list(reversed(metrics))
+            'metrics': metrics
         })
     
     except Exception as e:
