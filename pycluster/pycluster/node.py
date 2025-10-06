@@ -226,7 +226,7 @@ class WorkerNode:
         # Filter to show only workers from this node
         my_workers = [
             worker for worker in cluster_info.get("workers", [])
-            if self.worker_name in worker.get("id", "")
+            if self.worker_name in str(worker.get("id", ""))
         ]
         
         return {
