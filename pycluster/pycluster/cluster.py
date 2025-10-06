@@ -77,11 +77,16 @@ class ClusterManager:
                 
                 # Apply Windows fixes
                 fix_windows_event_loop()
-                self.scheduler = await start_scheduler_safely(
+                
+                # Create scheduler first
+                self.scheduler = Scheduler(
                     host=host,
                     port=scheduler_port,
                     dashboard_address=f":{dashboard_port}"
                 )
+                
+                # Start scheduler safely
+                await start_scheduler_safely(self.scheduler)
                 
             self.is_head_node = True
             
