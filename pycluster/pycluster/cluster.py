@@ -6,6 +6,7 @@ import os
 import time
 import socket
 import logging
+import asyncio
 from typing import Optional, List, Dict, Any
 from dask.distributed import Client, Scheduler, Worker, LocalCluster
 from dask import delayed
@@ -125,6 +126,9 @@ class ClusterManager:
         try:
             self.scheduler_address = scheduler_address
             
+            # Create client first to test connection
+            self.client = Client(scheduler_address, timeout=30)
+            
             # Create workers
             for i in range(n_workers):
                 worker = Worker(
@@ -144,8 +148,16 @@ class ClusterManager:
                 self.worker_processes.append(worker_thread)
                 self.workers.append(worker)
             
-            # Create client for task submission
-            self.client = Client(scheduler_address)
+            # Wait a moment for workers to connect
+            await asyncio.sleep(2)
+            
+            # Verify workers connected
+            try:
+                info = self.client.scheduler_info()
+                connected_workers = info.get('n_workers', 0)
+                logger.info(f"Workers connected: {connected_workers}")
+            except Exception as e:
+                logger.warning(f"Could not verify worker connection: {e}")
             
             return {
                 "status": "success",
