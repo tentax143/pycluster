@@ -18,9 +18,9 @@ from pycluster.node import WorkerNode
 from pycluster.worker_discovery import EasyWorkerJoin
 
 class Phase1WorkerTest:
-    def __init__(self):
+    def __init__(self, scheduler_address=None):
         self.worker_node = None
-        self.scheduler_address = None
+        self.scheduler_address = scheduler_address
         self.test_results = {}
         
     def log(self, message, status="INFO"):
@@ -52,9 +52,13 @@ class Phase1WorkerTest:
                 self.log("No clusters found on network", "WARN")
                 self.log("This is expected if no head node is running", "INFO")
                 
-                # Try to use a default address for testing
-                self.scheduler_address = "tcp://172.16.71.183:8786"
-                self.log(f"Using default scheduler address: {self.scheduler_address}", "INFO")
+                # Use provided scheduler address or default
+                if not self.scheduler_address:
+                    self.scheduler_address = "tcp://172.16.71.183:8786"
+                    self.log(f"Using default scheduler address: {self.scheduler_address}", "INFO")
+                else:
+                    self.log(f"Using provided scheduler address: {self.scheduler_address}", "INFO")
+                
                 self.test_results["worker_discovery"] = False
                 return False
                 
@@ -371,10 +375,16 @@ class Phase1WorkerTest:
 
 async def main():
     """Main test function"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="PyCluster Phase 1 Worker Test")
+    parser.add_argument("--scheduler", help="Scheduler address (e.g., tcp://192.168.1.100:8786)")
+    args = parser.parse_args()
+    
     print("PyCluster Phase 1 Worker Comprehensive Test")
     print("=" * 60)
     
-    tester = Phase1WorkerTest()
+    tester = Phase1WorkerTest(scheduler_address=args.scheduler)
     
     try:
         success = await tester.run_all_tests()

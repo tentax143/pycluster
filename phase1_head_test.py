@@ -52,12 +52,14 @@ class Phase1HeadTest:
         self.log("=== Test 2: Head Node Startup ===")
         
         try:
-            result = await self.head_node.start(n_local_workers=1)
+            # Start head node WITHOUT local workers - wait for external workers
+            result = await self.head_node.start(n_local_workers=0)
             
             if result['status'] == 'success':
                 self.log("Head node started successfully", "PASS")
                 self.log(f"  Scheduler: {result.get('scheduler_address', 'N/A')}")
                 self.log(f"  Dashboard: {result.get('dashboard_address', 'N/A')}")
+                self.log("  Waiting for external workers to join...", "INFO")
                 self.test_results["head_startup"] = True
                 return True
             else:
@@ -215,9 +217,65 @@ class Phase1HeadTest:
             self.test_results["discovery_broadcasting"] = False
             return False
     
+    def test_external_worker_wait(self):
+        """Test 8: Wait for external workers to join"""
+        self.log("=== Test 8: External Worker Wait ===")
+        
+        try:
+            from dask.distributed import Client
+            
+            conn_info = self.head_node.get_connection_info()
+            scheduler_address = conn_info['scheduler_address']
+            
+            self.log("Waiting for external workers to join...")
+            self.log("  (Run 'python phase1_worker_test.py' in another terminal)")
+            self.log("  (Or use: python pycluster/join_worker_easy.py --scheduler <address>)")
+            self.log(f"  Scheduler address: {scheduler_address}")
+            
+            # Wait for workers to join (up to 2 minutes)
+            max_wait_time = 120  # 2 minutes
+            check_interval = 5   # Check every 5 seconds
+            waited_time = 0
+            
+            while waited_time < max_wait_time:
+                try:
+                    client = Client(scheduler_address, timeout=5)
+                    info = client.scheduler_info()
+                    worker_count = info.get('n_workers', 0)
+                    client.close()
+                    
+                    if worker_count > 0:
+                        self.log(f"External worker(s) joined! Total workers: {worker_count}", "PASS")
+                        
+                        # List worker details
+                        workers = info.get('workers', {})
+                        for worker_addr, worker_info in workers.items():
+                            self.log(f"  Worker: {worker_info.get('name', 'unknown')} at {worker_addr}")
+                        
+                        self.test_results["external_worker_wait"] = True
+                        return True
+                    else:
+                        self.log(f"No workers yet... waiting ({waited_time}s/{max_wait_time}s)", "INFO")
+                        
+                except Exception as e:
+                    self.log(f"Error checking workers: {e}", "WARN")
+                
+                time.sleep(check_interval)
+                waited_time += check_interval
+            
+            self.log("No external workers joined within timeout", "WARN")
+            self.log("This is expected if no worker test is running", "INFO")
+            self.test_results["external_worker_wait"] = False
+            return False
+            
+        except Exception as e:
+            self.log(f"External worker wait error: {e}", "FAIL")
+            self.test_results["external_worker_wait"] = False
+            return False
+    
     def test_llm_manager_initialization(self):
-        """Test 8: LLM manager initialization"""
-        self.log("=== Test 8: LLM Manager Initialization ===")
+        """Test 9: LLM manager initialization"""
+        self.log("=== Test 9: LLM Manager Initialization ===")
         
         try:
             # Check if LLM serving is available
@@ -286,6 +344,7 @@ class Phase1HeadTest:
             self.test_port_connectivity,
             self.test_dask_client_connection,
             self.test_discovery_broadcasting,
+            self.test_external_worker_wait,
             self.test_llm_manager_initialization
         ]
         
