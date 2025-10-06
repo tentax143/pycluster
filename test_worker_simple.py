@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'pycluster'))
 
 def test_simple_worker_connection():
     """Test worker connection using the simplest approach"""
-    print("🔄 Testing Simple Worker Connection...")
+    print("Testing Simple Worker Connection...")
     
     scheduler_address = "tcp://172.16.71.183:8786"
     
